@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title="Disease Prediction App",
+st.set_page_config(page_title="Disease Diagnosis App",
                    page_icon="🩺", layout="wide")
 st.markdown('''
     <style>
@@ -65,16 +65,60 @@ st.markdown('''
             border-radius: 0.375rem;
             background-color: #1e3a8a;
         }
-
-        table {width: 100%;border-collapse: collapse;}
-        th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #4b5563;
+        
+        .user-info-card {
+            padding: 1rem;
+            color: #d1d5db;
+            margin-bottom: 1rem;
+            border-radius: 0.375rem;
+            background-color: #374151;
+            border-left: 4px solid #10b981;
+        }
+            
+        .precaution-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .precaution-card {
+            background-color: #2a3441;
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            border-top: 4px solid #3b82f6;
+        }
+        
+        .precaution-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .precaution-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #3b82f6;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            margin-right: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .precaution-content {
+            display: flex;
+            align-items: center;
+        }
+        
+        .precaution-text {
+            font-weight: 500;
+            color: #e5e7eb;
         }
 
-        th {color: #e5e7eb;background-color: #374151;}
-        td {color: #d1d5db;background-color: #1f2937;}
         .progress-container {
             display: flex;
             align-items: center;
@@ -132,7 +176,27 @@ st.markdown('''
     </style>
 ''', unsafe_allow_html=True)
 
-st.title("🩺 Advanced Disease Prediction System")
+st.title("🩺 Disease Diagnosis System")
+st.markdown("By: Aditya Pandey")
+st.markdown("Registration no: 225890264")
+st.markdown("## User Information")
+
+col_user1, col_user2, col_user3 = st.columns(3)
+
+with col_user1:
+    user_name = st.text_input("Full Name", placeholder="Enter your full name")
+
+with col_user2:
+    user_age = st.number_input("Age", min_value=1, max_value=120, value=25)
+
+with col_user3:
+    user_gender = st.selectbox(
+        "Gender", options=["Male", "Female", "Other", "Prefer not to say"])
+
+user_contact = st.text_input(
+    "Contact Number", placeholder="Enter your contact number")
+
+st.markdown("---")
 st.markdown(
     "Please select the symptoms you're experiencing for an accurate prediction.")
 
@@ -253,10 +317,20 @@ with col1:
 with col2:
     st.subheader("Results")
 
+    if predict_button and user_name:
+        st.markdown(f"""
+        <div class='user-info-card'>
+            <h4>Patient Information</h4>
+            <p><strong>Name:</strong> {user_name}</p>
+            <p><strong>Age:</strong> {user_age}</p>
+            <p><strong>Gender:</strong> {user_gender}</p>
+            <p><strong>Contact:</strong> {user_contact}</p>
+        </div>
+        """, unsafe_allow_html=True)
+
     if improved_model and predict_button and len(selected_symptoms) > 0:
         st.markdown("<div class='selected-symptoms'><strong>Selected Symptoms:</strong><br>" +
                     ", ".join(selected_symptoms) + "</div>", unsafe_allow_html=True)
-
         predictions = predict_with_improved_model(selected_symptoms)
 
         if predictions:
@@ -293,32 +367,34 @@ with col2:
                                     unsafe_allow_html=True)
                         precautions = precautions.values[0]
 
-                        st.markdown("""
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Precaution #</th>
-                                    <th>Description</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                        """, unsafe_allow_html=True)
+                        st.markdown("<div class='precaution-list'>",
+                                    unsafe_allow_html=True)
 
                         for j, precaution in enumerate(precautions, start=1):
                             if precaution and str(precaution).lower() != 'none':
                                 st.markdown(f"""
-                                <tr>
-                                    <td>{j}</td>
-                                    <td>{precaution}</td>
-                                </tr>
+                                <div class='precaution-card'>
+                                    <div class='precaution-content'>
+                                        <span class='precaution-number'>{j}</span>
+                                        <span class='precaution-text'>{precaution}</span>
+                                    </div>
+                                </div>
                                 """, unsafe_allow_html=True)
 
-                        st.markdown("""
-                            </tbody>
-                        </table>
-                        """, unsafe_allow_html=True)
+                        st.markdown("</div>", unsafe_allow_html=True)
 
     elif not improved_model and predict_button:
+        if user_name:
+            st.markdown(f"""
+            <div class='user-info-card'>
+                <h4>Patient Information</h4>
+                <p><strong>Name:</strong> {user_name}</p>
+                <p><strong>Age:</strong> {user_age}</p>
+                <p><strong>Gender:</strong> {user_gender}</p>
+                <p><strong>Contact:</strong> {user_contact}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
         prediction = model.predict(user_symptoms_np)
         predicted_disease = le_disease.inverse_transform(
             [prediction.argmax()])[0]
@@ -338,27 +414,19 @@ with col2:
                 st.markdown("<h3>Recommended Precautions</h3>",
                             unsafe_allow_html=True)
                 precautions = precautions.values[0]
-                st.markdown("""
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Precaution #</th>
-                            <th>Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                """, unsafe_allow_html=True)
+
+                st.markdown("<div class='precaution-list'>",
+                            unsafe_allow_html=True)
 
                 for i, precaution in enumerate(precautions, start=1):
                     if precaution and str(precaution).lower() != 'none':
                         st.markdown(f"""
-                        <tr>
-                            <td>{i}</td>
-                            <td>{precaution}</td>
-                        </tr>
+                        <div class='precaution-card'>
+                            <div class='precaution-content'>
+                                <span class='precaution-number'>{i}</span>
+                                <span class='precaution-text'>{precaution}</span>
+                            </div>
+                        </div>
                         """, unsafe_allow_html=True)
 
-                st.markdown("""
-                    </tbody>
-                </table>
-                """, unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)

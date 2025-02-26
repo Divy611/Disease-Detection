@@ -20,7 +20,6 @@ symptom_columns = [col for col in data.columns if 'Symptom' in col]
 
 
 def create_symptom_features(data, symptom_columns):
-    # Get all unique symptoms
     all_symptoms = set()
     for col in symptom_columns:
         all_symptoms.update(data[col].unique())
@@ -35,7 +34,6 @@ def create_symptom_features(data, symptom_columns):
             symptom = row[col]
             if symptom != 'None':
                 X[i, symptom_to_idx[symptom]] = 1
-
     return X, all_symptoms
 
 
@@ -84,7 +82,6 @@ if hasattr(best_model, 'feature_importances_'):
 
 def predict_disease(symptoms, model, symptom_names, le_disease):
     X_new = np.zeros(len(symptom_names))
-
     found_symptoms = []
     not_found_symptoms = []
 
@@ -113,7 +110,6 @@ def predict_disease(symptoms, model, symptom_names, le_disease):
         disease = le_disease.inverse_transform([idx])[0]
         prob = probabilities[idx]
         results.append((disease, prob))
-
     return results
 
 
@@ -156,7 +152,6 @@ def predict_from_symptoms(symptoms, model_folder='improved_model'):
 
     with open(os.path.join(model_folder, 'symptom_names.pkl'), 'rb') as f:
         symptom_names = pickle.load(f)
-
     return predict_disease(symptoms, model, symptom_names, le_disease)
 
 
