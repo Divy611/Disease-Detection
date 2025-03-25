@@ -1,0 +1,15 @@
+// Disease Prediction Model Architecture
+digraph {
+	rankdir=TB size="8,8"
+	A [label="Data Collection"]
+	B [label="Data Preprocessing"]
+	C [label="Feature Engineering"]
+	D [label="Model Training"]
+	E [label="Model Evaluation"]
+	F [label=Prediction]
+	A -> B
+	B -> C
+	C -> D
+	D -> E
+	E -> F
+}

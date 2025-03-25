@@ -2,11 +2,15 @@ import os
 import pickle
 import numpy as np
 import pandas as pd
+from itertools import cycle
+import matplotlib.pyplot as plt
 from xgboost import XGBClassifier
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, accuracy_score
+from sklearn.preprocessing import label_binarize
+from sklearn.multiclass import OneVsRestClassifier
+from sklearn.model_selection import train_test_split, learning_curve
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.metrics import classification_report, accuracy_score, roc_curve, auc, precision_recall_curve
 
 data = pd.read_csv('DiseaseAndSymptoms.csv')
 data.fillna('None', inplace=True)
@@ -45,6 +49,9 @@ y = le_disease.fit_transform(data['Disease'])
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.25, random_state=42, stratify=y)
 
+if not os.path.exists('graphs'):
+    os.makedirs('graphs')
+
 models = {
     'Random Forest': RandomForestClassifier(n_estimators=200, max_depth=20,
                                             min_samples_split=5, random_state=42,
@@ -52,10 +59,151 @@ models = {
     'Gradient Boosting': GradientBoostingClassifier(n_estimators=150, learning_rate=0.1,
                                                     max_depth=7, random_state=42),
     'XGBoost': XGBClassifier(n_estimators=150, learning_rate=0.1, max_depth=7,
-                             random_state=42, use_label_encoder=False, eval_metric='mlogloss')
+                             random_state=42, eval_metric='mlogloss',
+                             num_class=len(np.unique(y)))
 }
 
+
+def plot_learning_curve(estimator, X, y, title):
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=5, n_jobs=-1, train_sizes=np.linspace(0.1, 1.0, 10))
+
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
+
+    plt.figure(figsize=(10, 6))
+    plt.title(title)
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    plt.grid()
+
+    plt.fill_between(train_sizes, train_scores_mean - train_scores_std,
+                     train_scores_mean + train_scores_std, alpha=0.1, color="r")
+    plt.fill_between(train_sizes, test_scores_mean - test_scores_std,
+                     test_scores_mean + test_scores_std, alpha=0.1, color="g")
+    plt.plot(train_sizes, train_scores_mean, 'o-',
+             color="r", label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-',
+             color="g", label="Cross-validation score")
+    plt.legend(loc="best")
+    plt.savefig(f"graphs/{title.replace(' ', '_')}_learning_curve.png")
+    plt.close()
+
+
+def plot_multiclass_roc(model, X_test, y_test, model_name, n_classes):
+    y_test_bin = label_binarize(y_test, classes=range(n_classes))
+    if isinstance(model, XGBClassifier):
+        xgb_model = XGBClassifier(
+            n_estimators=model.n_estimators,
+            learning_rate=model.learning_rate,
+            max_depth=model.max_depth,
+            random_state=model.random_state,
+            # use_label_encoder=model.use_label_encoder,
+            eval_metric=model.eval_metric,
+            num_class=n_classes
+        )
+        classifier = OneVsRestClassifier(xgb_model)
+    else:
+        classifier = OneVsRestClassifier(model)
+
+    y_score = classifier.fit(X_train, y_train).predict_proba(X_test)
+
+    fpr = dict()
+    tpr = dict()
+    roc_auc = dict()
+
+    for i in range(n_classes):
+        if i < y_score.shape[1]:
+            fpr[i], tpr[i], _ = roc_curve(y_test_bin[:, i], y_score[:, i])
+            roc_auc[i] = auc(fpr[i], tpr[i])
+
+    plt.figure(figsize=(10, 8))
+    colors = cycle(['blue', 'red', 'green', 'cyan', 'magenta'])
+
+    for i, color in zip(range(min(5, n_classes)), colors):
+        if i in roc_auc:
+            plt.plot(fpr[i], tpr[i], color=color, lw=2,
+                     label=f'ROC curve of class {i} (area = {roc_auc[i]:.2f})')
+
+    plt.plot([0, 1], [0, 1], 'k--', lw=2)
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'Multi-class ROC - {model_name}')
+    plt.legend(loc="lower right")
+    plt.savefig(f"graphs/{model_name.replace(' ', '_')}_multiclass_roc.png")
+    plt.close()
+
+
+def plot_precision_recall_curve(model, X_test, y_test, model_name, n_classes):
+    y_test_bin = label_binarize(y_test, classes=range(n_classes))
+    if isinstance(model, XGBClassifier):
+        xgb_model = XGBClassifier(
+            n_estimators=model.n_estimators,
+            learning_rate=model.learning_rate,
+            max_depth=model.max_depth,
+            random_state=model.random_state,
+            # use_label_encoder=model.use_label_encoder,
+            eval_metric=model.eval_metric,
+            num_class=n_classes
+        )
+        classifier = OneVsRestClassifier(xgb_model)
+    else:
+        classifier = OneVsRestClassifier(model)
+
+    y_score = classifier.fit(X_train, y_train).predict_proba(X_test)
+    precision = dict()
+    recall = dict()
+
+    plt.figure(figsize=(10, 8))
+    colors = cycle(['blue', 'red', 'green', 'cyan', 'magenta'])
+
+    for i, color in zip(range(min(5, n_classes)), colors):
+        if i < y_score.shape[1]:
+            precision[i], recall[i], _ = precision_recall_curve(
+                y_test_bin[:, i], y_score[:, i])
+            plt.plot(recall[i], precision[i], color=color, lw=2,
+                     label=f'Precision-Recall for class {i}')
+
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'Precision-Recall Curve - {model_name}')
+    plt.legend(loc="best")
+    plt.savefig(f"graphs/{model_name.replace(' ', '_')}_precision_recall.png")
+    plt.close()
+
+
+def create_architecture_diagram():
+    fig, ax = plt.figure(figsize=(10, 8)), plt.gca()
+    ax.axis('off')
+
+    boxes = ['Data Collection', 'Data Preprocessing', 'Feature Engineering',
+             'Model Training', 'Model Evaluation', 'Prediction']
+
+    box_positions = [(0.5, 0.85), (0.5, 0.7), (0.5, 0.55),
+                     (0.5, 0.4), (0.5, 0.25), (0.5, 0.1)]
+
+    for i, (box, pos) in enumerate(zip(boxes, box_positions)):
+        rect = plt.Rectangle((pos[0]-0.15, pos[1]-0.05), 0.3, 0.1,
+                             fill=True, color='skyblue', alpha=0.7)
+        ax.add_patch(rect)
+        ax.text(pos[0], pos[1], box, ha='center', va='center', fontsize=12)
+
+        if i < len(boxes) - 1:
+            ax.arrow(pos[0], pos[1]-0.05, 0, -0.1, head_width=0.02,
+                     head_length=0.02, fc='black', ec='black')
+
+    plt.title('Disease Prediction Model Architecture', fontsize=14)
+    plt.savefig("graphs/architecture_diagram.png")
+    plt.close()
+
+
+n_classes = len(np.unique(y))
 results = {}
+
 for name, model in models.items():
     print(f"\nTraining {name}...")
     model.fit(X_train, y_train)
@@ -65,6 +213,17 @@ for name, model in models.items():
     print(f"{name} Accuracy: {accuracy:.4f}")
     print(f"{name} Classification Report:")
     print(classification_report(y_test, y_pred))
+
+for name, model in models.items():
+    print(f"\nGenerating evaluation metrics for {name}...")
+    plot_learning_curve(model, X_train, y_train, f"{name} Learning Curve")
+
+    plot_multiclass_roc(model, X_test, y_test, name, n_classes)
+    plot_precision_recall_curve(model, X_test, y_test, name, n_classes)
+
+    y_pred = model.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    results[name] = accuracy
 
 best_model_name = max(results, key=results.get)
 best_model = models[best_model_name]
@@ -78,6 +237,19 @@ if hasattr(best_model, 'feature_importances_'):
     print("\nTop 20 most important symptoms:")
     for i in range(min(20, len(symptom_names))):
         print(f"{symptom_names[indices[i]]}: {importances[indices[i]]:.4f}")
+
+accuracies = [results[model] for model in models.keys()]
+plt.figure(figsize=(10, 6))
+plt.bar(models.keys(), accuracies)
+plt.title("Model Accuracy Comparison")
+plt.xlabel("Models")
+plt.ylabel("Accuracy")
+plt.ylim(0, 1)
+plt.savefig("graphs/model_accuracy_comparison.png")
+plt.close()
+create_architecture_diagram()
+
+print("Evaluation metrics, graphs, and architecture diagram have been generated.")
 
 
 def predict_disease(symptoms, model, symptom_names, le_disease):
